@@ -1,5 +1,6 @@
 #! /usr/bash
 
 #if AWS CLI isn't installed, install 
-
+#check that the /usr/local/bin/aws exists 
+if [ -f /usr/local/bin/aws]; then
 #Set up authentication 
