@@ -1,24 +1,71 @@
 #! /usr/bash
 
-#if AWS CLI isn't installed, install
+usage () {
+    echo "Usage: $0 <source file> <target aws bucket> [-new filename] [-prefix]"
+    exit 1
+}
 
+if [[ $# -lt 2 ]];
+then
+    echo "Please provide at least 2 arguments!"
+    usage
+fi
+
+source_file=$1
+target_bucket=$2
+
+read_input(){
+    local prompt=$1
+    local clean_input=$2
+    local user_input
+
+    #validate entry
+    while true;
+    do
+        read -r -p "$prompt" user_input
+        if [[ -n $user_input ]];
+        then
+            eval "$clean_input='$user_input'"
+            break
+        else
+            echo "Input cannot be empty! Please try again" 
+        fi
+    done
+}
+
+#if AWS CLI isn't installed, install
 aws_cli_path="/usr/local/aws-cli/v2/current/bin/aws"
+aws_config_dir=("$HOME/.aws/credentials" "$HOME/.aws/config")
 
 if [[ -e "$aws_cli_path" && -s "$aws_cli_path" ]]; then
     
-    #verify or configure credentials
+    #check for credentials
+    loop_completed=true
 
-    config_file="$HOME/.aws/credentials"
-    
-    if [[ -e "$config_file" ]] && grep -q "\[default\]" "$config_file"; then
-        :
-    else
-        echo "Please provide your AWS access key id:"
-        read -r accesskey_id 
-        echo "Please provide your secret access key:"
-        read -r secret_access_key
-        
-        echo -e "[default]\naws_access_key_id = $accesskey_id\naws_secret_access_key = $secret_access_key" > "$config_file"  
+    for file in "${aws_config_dir[@]}"; do
+        if [[ -e "$file" ]] && grep -q "aws_access_key_id" "$file"; then
+            echo "Configuration file exists."
+            loop_completed=false
+            break
+        fi
+    done
+
+    #If configurations don't exist, set up config
+    if [ $loop_completed = true ]; then
+        echo -e "Setting up AWS CLI configuration...\n" 
+        read_input "Please provide your AWS IAM user access key id:" accesskey_id
+        read_input "Enter the secret access key:" secret_access_key
+        read_input "Please enter your account's default region(e.g. us-west-2):" default_region
+
+        cat <<- EOF > "${aws_config_dir[1]}"
+[default]
+aws_access_key_id = $accesskey_id
+aws_secret_access_key = $secret_access_key
+region=$default_region
+output=json
+
+EOF
+
     fi
 else
     echo "Installing AWS CLI..."
@@ -28,13 +75,33 @@ else
     
     #If installation was successful, configure creditials
     if [ $exit_code -eq 0 ]; then
-        echo "Please provide your AWS access key id:"
-        read -r accesskey_id 
-        echo "Please provide your secret access key:"
-        read -r secret_access_key
-        
-        echo -e "[default]\naws_access_key_id = $accesskey_id\naws_secret_access_key = $secret_access_key" > "$config_file"
+        echo -e "Setting up AWS CLI configuration...\n" 
+        read_input "Please provide your AWS IAM user access key id:" accesskey_id
+        read_input "Enter the secret access key:" secret_access_key
+        read_input "Please enter your account's default region(e.g. us-west-2):" default_region
+
+        cat <<- EOF > "${aws_config_dir[1]}"
+[default]
+aws_access_key_id = $accesskey_id
+aws_secret_access_key = $secret_access_key
+region=$default_region
+output=json
+
+EOF
     else
         echo "Unable to auto-install AWS CLI. Please install manually and try again."   
     fi 
 fi
+
+
+#create AWS CLI profile for IAM role
+echo "Setting up profile to use for task..."
+echo "Please provide the arn for the IAM role to be used for this task:"
+read -r aws_role_arn
+
+cat <<- EOF >> "${aws_config_dir[1]}"
+[profile cloud_send]
+role_arn= $aws_role_arn
+source_profile = default
+EOF
+
