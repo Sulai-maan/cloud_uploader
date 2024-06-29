@@ -1,10 +1,11 @@
 #! /usr/bash
 
 usage () {
-    echo "Usage: $0 <source file> <target aws bucket> [-new filename] [-prefix]"
+    echo "Usage: '$0' <source file> <target aws bucket> [-new filename] [-prefix]"
     exit 1
 }
 
+#validate min. number of args
 if [[ $# -lt 2 ]];
 then
     echo "Please provide at least 2 arguments!"
@@ -14,6 +15,47 @@ fi
 source_file=$1
 target_bucket=$2
 
+#validate source file
+if [[ -e "$source_file" ]];
+then
+    if [[ -r "$source_file" ]];
+    then
+        if [[ -f "$source_file" ]];
+        then
+            :
+        elif [[ -d "$source_file" ]];
+        then
+            while true; 
+            do
+                read -r -p "You're attempting to upload a directory and all of its content, continue? Y-[Yes], N-[No, cancel]" recursive
+                case "$recursive" in
+                    [Yy])
+                        recursive=true
+                        break
+                        ;;
+                    [Nn])
+                        echo "Operation cancelled."
+                        exit 1
+                        ;;
+                    *)
+                        echo "Invalid response, please try again"
+                        ;;
+                esac
+            done
+        else
+            echo "Invalid source file type. Please try again."
+            exit 1
+        fi
+    else
+        echo "Sorry, you don't have read permissions for the source file"
+        exit 1
+    fi
+else
+    echo "There's no such file or directory. Please try again."
+    exit 1
+fi
+
+#Accept and validate against empty input
 read_input(){
     local prompt=$1
     local clean_input=$2
@@ -33,7 +75,7 @@ read_input(){
     done
 }
 
-#if AWS CLI isn't installed, install
+#if AWS CLI isn't installed, install and configure
 aws_cli_path="/usr/local/aws-cli/v2/current/bin/aws"
 aws_config_dir=("$HOME/.aws/credentials" "$HOME/.aws/config")
 
@@ -68,6 +110,7 @@ EOF
 
     fi
 else
+    #AWS CLI not installed, install and configure
     echo "Installing AWS CLI..."
     curl "https://awscli.amazonaws.com/awscli-exe-linux-x86_64.zip" -o "awscliv2.zip" && unzip awscliv2.zip && sudo ./aws/install
     
@@ -96,8 +139,7 @@ fi
 
 #create AWS CLI profile for IAM role
 echo "Setting up profile to use for task..."
-echo "Please provide the arn for the IAM role to be used for this task:"
-read -r aws_role_arn
+read_input "Please provide the arn for the IAM role to be used for this task:" aws_role_arn
 
 cat <<- EOF >> "${aws_config_dir[1]}"
 [profile cloud_send]
