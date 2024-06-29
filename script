@@ -1,19 +1,31 @@
 #! /usr/bash
 
 usage () {
-    echo "Usage: '$0' <source file> <target aws bucket> [-new filename] [-prefix]"
+    echo "Usage: '$0' <source file> <target aws bucket> [-new filename]"
     exit 1
 }
 
 #validate min. number of args
-if [[ $# -lt 2 ]];
+if [[ $# -lt 2 || $# -gt 3 ]];
 then
-    echo "Please provide at least 2 arguments!"
+    echo "Please provide 2 or 3 arguments."
     usage
 fi
 
-source_file=$1
-target_bucket=$2
+source_file="$1"
+target_bucket="$2"
+
+if [[ $# -eq 3 ]];
+then   
+    new_filename="$3"
+    #validate new_filename
+    if [[ $new_filename =~ [^a-zA-Z0-9!-_().*\'] ]];
+    then
+        printf "Your new file name contains unwanted characters.\n"
+        printf "To allow for cross-platform compatibility, new file names can only contain the following characters[a-zA-Z0-9!-_.*']"
+        exit 1
+    fi
+fi
 
 #validate source file
 if [[ -e "$source_file" ]];
@@ -131,6 +143,7 @@ region=$default_region
 output=json
 
 EOF
+    chmod 400 "${aws_config_dir[1]}"
     else
         echo "Unable to auto-install AWS CLI. Please install manually and try again."   
     fi 
