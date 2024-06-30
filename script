@@ -17,6 +17,7 @@ target_bucket="$2"
 
 if [[ $# -eq 3 ]];
 then   
+    change_filename=true
     new_filename="$3"
     #validate new_filename
     if [[ $new_filename =~ [^a-zA-Z0-9!-_().*\'] ]];
@@ -160,3 +161,20 @@ role_arn= $aws_role_arn
 source_profile = default
 EOF
 
+prof_config=$?
+
+if [[ $prof_config -eq 0 ]];
+then
+    echo "Profile setup successful!"
+else
+    echo "There was a problem setting up your profile. Please try again."
+    exit 1
+fi
+
+#upload file
+if $change_filename;
+then
+    aws s3 cp "$source_file" "s3://$target_bucket/$new_filename"
+else
+    aws s3 cp "$source_file" "s3://$target_bucket/$source_file"
+fi
