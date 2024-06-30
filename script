@@ -26,6 +26,8 @@ then
         printf "To allow for cross-platform compatibility, new file names can only contain the following characters[a-zA-Z0-9!-_.*']"
         exit 1
     fi
+else
+    change_filename=false
 fi
 
 #validate source file
