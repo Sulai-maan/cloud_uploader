@@ -79,7 +79,26 @@ read_input(){
     #validate entry
     while true;
     do
-        read -r -p "$prompt" user_input
+        read -rp "$prompt" user_input
+        if [[ -n $user_input ]];
+        then
+            eval "$clean_input='$user_input'"
+            break
+        else
+            echo "Input cannot be empty! Please try again" 
+        fi
+    done
+}
+
+read_secret_input(){
+    local prompt=$1
+    local clean_input=$2
+    local user_input
+
+    #validate entry
+    while true;
+    do
+        read -rsp "$prompt" user_input
         if [[ -n $user_input ]];
         then
             eval "$clean_input='$user_input'"
@@ -91,39 +110,51 @@ read_input(){
 }
 
 #if AWS CLI isn't installed, install and configure
-aws_cli_path="/usr/local/aws-cli/v2/current/bin/aws"
-aws_config_dir=("$HOME/.aws/credentials" "$HOME/.aws/config")
 
-if [[ -e "$aws_cli_path" && -s "$aws_cli_path" ]]; then
+aws_cli_path=$(which aws)
+
+if [[ -n "$aws_cli_path" ]]; then
     
-    #check for credentials
-    loop_completed=true
-
-    for file in "${aws_config_dir[@]}"; do
-        if [[ -e "$file" ]] && grep -q "aws_access_key_id" "$file"; then
-            echo "Configuration file exists."
-            loop_completed=false
-            break
+    #check that credentials exist
+	echo -e "AWS installed, checking for credentials...\n"
+    if [[ -e "$HOME/.aws/credentials" ]] && grep -q "aws_access_key_id" "$HOME/.aws/credentials";
+    then
+        echo "Credentials file found."
+    elif [[ -e "$HOME/.aws/config" ]] && grep -q "aws_access_key_id" "$HOME/.aws/config";
+    then
+        echo "Config file found"
+    else
+    #Set up config
+		echo "No aws config file found, trying to set up config"
+        if [[ ! -e "$HOME/.aws" ]];
+        then
+            mkdir "$HOME/.aws"     
         fi
-    done
-
-    #If configurations don't exist, set up config
-    if [ $loop_completed = true ]; then
+        touch "$HOME/.aws/config" && chmod -R 600 "$HOME/.aws/config"
+        #configure_profile $read_secret_input $read_input
         echo -e "Setting up AWS CLI configuration...\n" 
-        read_input "Please provide your AWS IAM user access key id:" accesskey_id
-        read_input "Enter the secret access key:" secret_access_key
+        read_secret_input "Please provide your AWS IAM user access key id:" accesskey_id
+        echo
+        read_secret_input "Enter the secret access key:" secret_access_key
+        echo
         read_input "Please enter your account's default region(e.g. us-west-2):" default_region
-
-        cat <<- EOF > "${aws_config_dir[1]}"
-[default]
-aws_access_key_id = $accesskey_id
-aws_secret_access_key = $secret_access_key
-region=$default_region
-output=json
-
-EOF
-
+        # echo -e "[default]\naws_access_key_id = $accesskey_id\naws_secret_access_key = $secret_access_key\n# region=$default_region\noutput=json\n" >> "$HOME/.aws/config"
+        tee "$HOME/.aws/config" <<- EOF > /dev/null
+        [default]
+        aws_access_key_id = $accesskey_id
+        aws_secret_access_key = $secret_access_key
+        region=$default_region
+        output=json
+		EOF
+		echo "New config written to file"
     fi
+#If AWS CLI is already downloaded, install
+elif [[ -e "./awscliv2.zip" && -s "./awscliv2.zip" ]];
+then
+    unzip awscliv2.zip && sudo ./aws/install
+elif [[ -e "./aws" && -s "./aws" ]]; 
+then
+    sudo ./aws/install
 else
     #AWS CLI not installed, install and configure
     echo "Installing AWS CLI..."
@@ -133,31 +164,33 @@ else
     
     #If installation was successful, configure creditials
     if [ $exit_code -eq 0 ]; then
+        mkdir "$HOME/.aws" && touch "$HOME/.aws/config" && chmod -R 600 "$HOME/.aws/config"
+        #configure_profile $read_secret_input $read_input
         echo -e "Setting up AWS CLI configuration...\n" 
-        read_input "Please provide your AWS IAM user access key id:" accesskey_id
-        read_input "Enter the secret access key:" secret_access_key
-        read_input "Please enter your account's default region(e.g. us-west-2):" default_region
+        read_secret_input "Please provide your AWS IAM user access key id:\n" accesskey_id
+        echo
+        read_secret_input "Enter the secret access key:" secret_access_key
+        echo
+        read_input "Please enter your account's default region(e.g. us-west-2):/n" default_region
+        # echo -e "[default]\naws_access_key_id = $accesskey_id\naws_secret_access_key = $secret_access_key\nregion=$default_region\noutput=json\n" >> "$HOME/.aws/config"
+        tee "$HOME/.aws/config" <<- EOF > /dev/null
+        [default]
+        aws_access_key_id = $accesskey_id
+        aws_secret_access_key = $secret_access_key
+        region=$default_region
+        output=json
+		EOF
 
-        cat <<- EOF > "${aws_config_dir[1]}"
-[default]
-aws_access_key_id = $accesskey_id
-aws_secret_access_key = $secret_access_key
-region=$default_region
-output=json
-
-EOF
-    chmod 400 "${aws_config_dir[1]}"
     else
         echo "Unable to auto-install AWS CLI. Please install manually and try again."   
     fi 
 fi
 
-
 #create AWS CLI profile for IAM role
 echo "Setting up profile to use for task..."
-read_input "Please provide the arn for the IAM role to be used for this task:" aws_role_arn
+read_secret_input "Please provide the arn for the IAM role to be used for this task:" aws_role_arn
 
-cat <<- EOF >> "${aws_config_dir[1]}"
+tee -a "$HOME/.aws/config" <<- EOF > /dev/null
 [profile cloud_send]
 role_arn= $aws_role_arn
 source_profile = default
@@ -176,7 +209,23 @@ fi
 #upload file
 if $change_filename;
 then
-    aws s3 cp "$source_file" "s3://$target_bucket/$new_filename"
+    response=$(aws s3 cp "$source_file" "s3://$target_bucket/$new_filename" --profile cloud_send)
 else
-    aws s3 cp "$source_file" "s3://$target_bucket/$source_file"
+    response=$(aws s3 cp "$source_file" "s3://$target_bucket/$source_file" --profile cloud_send)
+fi
+
+# upload_status=$?
+# if [[ $upload_status -eq 0 ]];
+# then
+#     echo "Operation successful. File upload completed"
+# else
+#     echo "Operation failed"
+# fi
+
+if [[ $? -ne 0 ]];
+then
+    echo -e "ERROR:  AWS reports s3api copy-object operation failed.\n$response"
+    exit 1
+else
+    echo -e "Operation successful"
 fi
