@@ -15,7 +15,7 @@ fi
 source_file="$1"
 target_bucket="$2"
 profile_name="$3"
-recursive=""
+recursive=" "
 
 
 if [[ $# -eq 4 ]];
@@ -114,25 +114,12 @@ then
     file_in_bucket=$(aws s3 ls "s3://$target_bucket/$new_filename" --profile "$profile_name" --human-readable)
 fi
 
-if [[ -z $(which openssl) ]];
-then
-    sudo apt-get update
-    sudo apt-get install -y openssl
-fi
-
-openssl_install=$?
-
-if [[ $openssl_install -eq 0 ]];
-then
-    encrypt_key=$(openssl rand -hex 32)
-fi
-
-#encrypt file before sending
-encrypted_source_file=$(openssl enc -aes256-cbc -salt -in "$source_file" -pbkdf2 -k "$encrypt_key")
+#create and save encryption key
+dd if=/dev/random of=key.bin bs=32 count=1 iflag=fullblock &> "/dev/null"
 
 if [[ -z $file_in_bucket ]];
 then
-    response=$(pv "$encrypted_source_file" | aws s3 cp - "s3://$target_bucket/$new_filename" --profile "$profile_name" "$recursive" --sse-c-copy-source --sse-c-copy-source-key "$encrypt_key")
+    response=$(pv "$source_file" | aws s3 cp - "s3://$target_bucket/$new_filename" --profile "$profile_name" --sse-c --sse-c-key "fileb://key.bin")
 else
     echo -e "\nTarget bucket $target_bucket contains the possibly duplicate item(s) listed below:"
     echo "$file_in_bucket"
@@ -153,12 +140,12 @@ else
                         break
                     fi
                 done
-                response=$(pv "$encrypted_source_file" | aws s3 cp - "s3://$target_bucket/$new_name" --profile "$profile_name" --sse-c-copy-source --sse-c-copy-source-key "$encrypt_key")
+                response=$(pv "$source_file" | aws s3 cp - "s3://$target_bucket/$new_name" --profile "$profile_name" --sse-c --sse-c-key "fileb://key.bin")
                 break
                 ;;
             [Oo])
                 aws s3 rm "s3://$target_bucket/$new_filename" --profile "$profile_name" --quiet
-                response=$(pv "$encrypted_source_file" | aws s3 cp - "s3://$target_bucket/$new_filename" --profile "$profile_name" --sse-c-copy-source --sse-c-copy-source-key "$encrypt_key")
+                response=$(pv "$source_file" | aws s3 cp - "s3://$target_bucket/$new_filename" --profile "$profile_name" --sse-c --sse-c-key "fileb://key.bin")
                 break
                 ;;
             [Ss])
