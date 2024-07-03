@@ -92,11 +92,9 @@ then
         
         exit_code=$?
         
-        #If installation was successful, configure creditials
-        if [ $exit_code -ne 0 ]; then
-            :
-        else
-            echo "Unable to auto-install AWS CLI. Please install manually and try again." 
+        if [ $exit_code -ne 0 ]; 
+        then
+            echo "Unable to auto-install AWS CLI. Please install manually and retry file upload." 
             exit 1  
         fi 
     fi
