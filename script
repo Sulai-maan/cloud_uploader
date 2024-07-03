@@ -72,85 +72,10 @@ else
     exit 1
 fi
 
-#Accept and validate against empty input
-read_input(){
-    local prompt=$1
-    local clean_input=$2
-    local user_input
-
-    #validate entry
-    while true;
-    do
-        read -rp "$prompt" user_input
-        if [[ -n $user_input ]];
-        then
-            eval "$clean_input='$user_input'"
-            break
-        else
-            echo "Input cannot be empty! Please try again" 
-        fi
-    done
-}
-
-read_secret_input(){
-    local prompt=$1
-    local clean_input=$2
-    local user_input
-
-    #validate entry
-    while true;
-    do
-        read -rsp "$prompt" user_input
-        if [[ -n $user_input ]];
-        then
-            eval "$clean_input='$user_input'"
-            break
-        else
-            echo "Input cannot be empty! Please try again" 
-        fi
-    done
-}
-
 #if AWS CLI isn't installed, install and configure
 
 aws_cli_path=$(which aws)
 
-# if [[ -n "$aws_cli_path" ]]; then
-    
-#     #check that credentials exist
-# 	echo -e "AWS installed, checking for credentials...\n"
-#     if [[ -e "$HOME/.aws/credentials" ]] && grep -q "aws_access_key_id" "$HOME/.aws/credentials";
-#     then
-#         echo "Credentials file found."
-#     elif [[ -e "$HOME/.aws/config" ]] && grep -q "aws_access_key_id" "$HOME/.aws/config";
-#     then
-#         echo "Config file found"
-#     else
-#     #Set up config
-# 		echo "No aws config file found, trying to set up config"
-#         if [[ ! -e "$HOME/.aws" ]];
-#         then
-#             mkdir "$HOME/.aws"     
-#         fi
-#         touch "$HOME/.aws/config" && chmod -R 600 "$HOME/.aws/config"
-#         #configure_profile $read_secret_input $read_input
-#         echo -e "Setting up AWS CLI configuration...\n" 
-#         read_secret_input "Please provide your AWS IAM user access key id:" accesskey_id
-#         echo
-#         read_secret_input "Enter the secret access key:" secret_access_key
-#         echo
-#         read_input "Please enter your account's default region(e.g. us-west-2):" default_region
-#         tee "$HOME/.aws/config" <<- EOF > /dev/null
-# [default]
-# aws_access_key_id = $accesskey_id
-# aws_secret_access_key = $secret_access_key
-# region=$default_region
-# output=json
-
-# EOF
-# 		echo "New config written to file"
-#     fi
-#If AWS CLI is already downloaded, install
 
 if [[ -z "$aws_cli_path" ]]; 
 then
@@ -170,49 +95,13 @@ then
         #If installation was successful, configure creditials
         if [ $exit_code -ne 0 ]; then
             :
-    #         mkdir "$HOME/.aws" && touch "$HOME/.aws/config" && chmod -R 600 "$HOME/.aws/config"
-    #         #configure_profile $read_secret_input $read_input
-    #         echo -e "Setting up AWS CLI configuration...\n" 
-    #         read_secret_input "Please provide your AWS IAM user access key id:\n" accesskey_id
-    #         echo
-    #         read_secret_input "Enter the secret access key:" secret_access_key
-    #         echo
-    #         read_input "Please enter your account's default region(e.g. us-west-2):/n" default_region
-
-    #         tee "$HOME/.aws/config" <<- EOF > /dev/null
-    # [default]
-    # aws_access_key_id = $accesskey_id
-    # aws_secret_access_key = $secret_access_key
-    # region=$default_region
-    # output=json
-
-    # EOF
-
         else
-            echo "Unable to auto-install AWS CLI. Please install manually and try again."   
+            echo "Unable to auto-install AWS CLI. Please install manually and try again." 
+            exit 1  
         fi 
     fi
 fi
 
-# #create AWS CLI profile for IAM role
-# echo "Setting up profile to use for task..."
-# read_secret_input "Please provide the arn for the IAM role to be used for this task:" aws_role_arn
-
-# tee -a "$HOME/.aws/config" <<- EOF > /dev/null
-# [profile cloud_send]
-# role_arn= $aws_role_arn
-# source_profile = default
-# EOF
-
-# prof_config=$?
-
-# if [[ $prof_config -eq 0 ]];
-# then
-#     echo "Profile setup successful!"
-# else
-#     echo "There was a problem setting up your profile. Please try again."
-#     exit 1
-# fi
 
 if [[ -z $(which pv) ]];
 then
@@ -220,23 +109,6 @@ then
     sudo apt-get install -y pv
 fi
 pv_exit_code=$?
-
-###############################################
-# if file doesn't already exist in bucket,
-#   if file is a directory and recursive is set
-#       include the recursive flag
-#   else
-#       simply upload
-# else if file exists 
-#    ask whether to overwrite, skip, or rename
-#       if o 
-#       if s
-#       if r
-#            ask what new name should be
-                # check if new name isn't already taken
-                # if not, upload,
-                # else repeat    
-
 
 #upload file
 if [[ $pv_exit_code -eq 0 ]];
@@ -286,20 +158,6 @@ else
         esac
     done
 fi
-
-# if [[ $pv_exit_code -eq 0 ]];
-# then
-#     response=$(pv "$source_file" | aws s3 cp - "s3://$target_bucket/$new_filename" --profile "$profile_name")
-# fi
-
-
-# upload_status=$?
-# if [[ $upload_status -eq 0 ]];
-# then
-#     echo "Operation successful. File upload completed"
-# else
-#     echo "Operation failed"
-# fi
 
 if [[ $? -ne 0 ]];
 then
