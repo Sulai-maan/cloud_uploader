@@ -1,33 +1,35 @@
 #! /usr/bash
 
 usage () {
-    echo "Usage: '$0' <source file> <target aws bucket> [-new filename]"
+    echo "Usage: '$0' <source file> <target aws bucket> <profile name> [-new filename]"
     exit 1
 }
 
 #validate min. number of args
-if [[ $# -lt 2 || $# -gt 3 ]];
+if [[ $# -lt 3 || $# -gt 4 ]];
 then
-    echo "Please provide 2 or 3 arguments."
+    echo "Please provide 3 or 4 arguments."
     usage
 fi
 
 source_file="$1"
 target_bucket="$2"
+profile_name="$3"
+recursive=""
 
-if [[ $# -eq 3 ]];
+
+if [[ $# -eq 4 ]];
 then   
-    change_filename=true
-    new_filename="$3"
+    new_filename="$4"
     #validate new_filename
-    if [[ $new_filename =~ [^a-zA-Z0-9!-_().*\'] ]];
+    if [[ ! $new_filename =~ ^[a-zA-Z0-9!-_().*\']*$ ]];
     then
-        printf "Your new file name contains unwanted characters.\n"
+        printf "Your new file name contains unsupported characters.\n"
         printf "To allow for cross-platform compatibility, new file names can only contain the following characters[a-zA-Z0-9!-_.*']"
         exit 1
     fi
 else
-    change_filename=false
+    new_filename="$1"
 fi
 
 #validate source file
@@ -45,7 +47,7 @@ then
                 read -r -p "You're attempting to upload a directory and all of its content, continue? Y-[Yes], N-[No, cancel]" recursive
                 case "$recursive" in
                     [Yy])
-                        recursive=true
+                        recursive="--recursive"
                         break
                         ;;
                     [Nn])
@@ -66,161 +68,96 @@ then
         exit 1
     fi
 else
-    echo "There's no such file or directory. Please try again."
+    echo "The file/directory $source_file does not exist. Please try again."
     exit 1
 fi
-
-#Accept and validate against empty input
-read_input(){
-    local prompt=$1
-    local clean_input=$2
-    local user_input
-
-    #validate entry
-    while true;
-    do
-        read -rp "$prompt" user_input
-        if [[ -n $user_input ]];
-        then
-            eval "$clean_input='$user_input'"
-            break
-        else
-            echo "Input cannot be empty! Please try again" 
-        fi
-    done
-}
-
-read_secret_input(){
-    local prompt=$1
-    local clean_input=$2
-    local user_input
-
-    #validate entry
-    while true;
-    do
-        read -rsp "$prompt" user_input
-        if [[ -n $user_input ]];
-        then
-            eval "$clean_input='$user_input'"
-            break
-        else
-            echo "Input cannot be empty! Please try again" 
-        fi
-    done
-}
 
 #if AWS CLI isn't installed, install and configure
 
 aws_cli_path=$(which aws)
 
-if [[ -n "$aws_cli_path" ]]; then
-    
-    #check that credentials exist
-	echo -e "AWS installed, checking for credentials...\n"
-    if [[ -e "$HOME/.aws/credentials" ]] && grep -q "aws_access_key_id" "$HOME/.aws/credentials";
+
+if [[ -z "$aws_cli_path" ]]; 
+then
+    if [[ -e "./awscliv2.zip" && -s "./awscliv2.zip" ]];
     then
-        echo "Credentials file found."
-    elif [[ -e "$HOME/.aws/config" ]] && grep -q "aws_access_key_id" "$HOME/.aws/config";
+        unzip awscliv2.zip && sudo ./aws/install
+    elif [[ -e "./aws" && -s "./aws" ]]; 
     then
-        echo "Config file found"
+        sudo ./aws/install
     else
-    #Set up config
-		echo "No aws config file found, trying to set up config"
-        if [[ ! -e "$HOME/.aws" ]];
-        then
-            mkdir "$HOME/.aws"     
-        fi
-        touch "$HOME/.aws/config" && chmod -R 600 "$HOME/.aws/config"
-        #configure_profile $read_secret_input $read_input
-        echo -e "Setting up AWS CLI configuration...\n" 
-        read_secret_input "Please provide your AWS IAM user access key id:" accesskey_id
-        echo
-        read_secret_input "Enter the secret access key:" secret_access_key
-        echo
-        read_input "Please enter your account's default region(e.g. us-west-2):" default_region
-        # echo -e "[default]\naws_access_key_id = $accesskey_id\naws_secret_access_key = $secret_access_key\n# region=$default_region\noutput=json\n" >> "$HOME/.aws/config"
-        tee "$HOME/.aws/config" <<- EOF > /dev/null
-        [default]
-        aws_access_key_id = $accesskey_id
-        aws_secret_access_key = $secret_access_key
-        region=$default_region
-        output=json
-		EOF
-		echo "New config written to file"
+        #AWS CLI not installed, install
+        echo "Installing AWS CLI..."
+        curl "https://awscli.amazonaws.com/awscli-exe-linux-x86_64.zip" -o "awscliv2.zip" && unzip awscliv2.zip && sudo ./aws/install
+        
+        exit_code=$?
+        
+        #If installation was successful, configure creditials
+        if [ $exit_code -ne 0 ]; then
+            :
+        else
+            echo "Unable to auto-install AWS CLI. Please install manually and try again." 
+            exit 1  
+        fi 
     fi
-#If AWS CLI is already downloaded, install
-elif [[ -e "./awscliv2.zip" && -s "./awscliv2.zip" ]];
-then
-    unzip awscliv2.zip && sudo ./aws/install
-elif [[ -e "./aws" && -s "./aws" ]]; 
-then
-    sudo ./aws/install
-else
-    #AWS CLI not installed, install and configure
-    echo "Installing AWS CLI..."
-    curl "https://awscli.amazonaws.com/awscli-exe-linux-x86_64.zip" -o "awscliv2.zip" && unzip awscliv2.zip && sudo ./aws/install
-    
-    exit_code=$?
-    
-    #If installation was successful, configure creditials
-    if [ $exit_code -eq 0 ]; then
-        mkdir "$HOME/.aws" && touch "$HOME/.aws/config" && chmod -R 600 "$HOME/.aws/config"
-        #configure_profile $read_secret_input $read_input
-        echo -e "Setting up AWS CLI configuration...\n" 
-        read_secret_input "Please provide your AWS IAM user access key id:\n" accesskey_id
-        echo
-        read_secret_input "Enter the secret access key:" secret_access_key
-        echo
-        read_input "Please enter your account's default region(e.g. us-west-2):/n" default_region
-        # echo -e "[default]\naws_access_key_id = $accesskey_id\naws_secret_access_key = $secret_access_key\nregion=$default_region\noutput=json\n" >> "$HOME/.aws/config"
-        tee "$HOME/.aws/config" <<- EOF > /dev/null
-        [default]
-        aws_access_key_id = $accesskey_id
-        aws_secret_access_key = $secret_access_key
-        region=$default_region
-        output=json
-		EOF
-
-    else
-        echo "Unable to auto-install AWS CLI. Please install manually and try again."   
-    fi 
 fi
 
-#create AWS CLI profile for IAM role
-echo "Setting up profile to use for task..."
-read_secret_input "Please provide the arn for the IAM role to be used for this task:" aws_role_arn
 
-tee -a "$HOME/.aws/config" <<- EOF > /dev/null
-[profile cloud_send]
-role_arn= $aws_role_arn
-source_profile = default
-EOF
-
-prof_config=$?
-
-if [[ $prof_config -eq 0 ]];
+if [[ -z $(which pv) ]];
 then
-    echo "Profile setup successful!"
-else
-    echo "There was a problem setting up your profile. Please try again."
-    exit 1
+    sudo apt-get update
+    sudo apt-get install -y pv
 fi
+pv_exit_code=$?
 
 #upload file
-if $change_filename;
+if [[ $pv_exit_code -eq 0 ]];
 then
-    response=$(aws s3 cp "$source_file" "s3://$target_bucket/$new_filename" --profile cloud_send)
-else
-    response=$(aws s3 cp "$source_file" "s3://$target_bucket/$source_file" --profile cloud_send)
+    file_in_bucket=$(aws s3 ls "s3://$target_bucket/$new_filename" --profile "$profile_name" --human-readable)
 fi
 
-# upload_status=$?
-# if [[ $upload_status -eq 0 ]];
-# then
-#     echo "Operation successful. File upload completed"
-# else
-#     echo "Operation failed"
-# fi
+
+if [[ -z $file_in_bucket ]];
+then
+    response=$(pv "$source_file" | aws s3 cp - "s3://$target_bucket/$new_filename" --profile "$profile_name" "$recursive")
+else
+    echo -e "\nTarget bucket $target_bucket contains the possibly duplicate item(s) listed below:"
+    echo "$file_in_bucket"
+    while true;
+    do
+        read -rp "Would you like to (r)ename, (o)verwrite, or (s)kip: " sync_op
+        echo
+        case "$sync_op" in
+            [Rr])
+                while true;
+                do
+                    read -rp "What would you like to rename your file? : " new_name
+                    if [[ $new_name =~ ^[^a-zA-Z0-9!-_().*\']*$ ]];
+                    then
+                        printf "Your new file name contains unsupported characters.\n"
+                        printf "To allow for cross-platform compatibility, new file names can only contain the following characters: [a-zA-Z0-9!-_.*']"
+                    else
+                        break
+                    fi
+                done
+                response=$(pv "$source_file" | aws s3 cp - "s3://$target_bucket/$new_name" --profile "$profile_name")
+                break
+                ;;
+            [Oo])
+                aws s3 rm "s3://$target_bucket/$new_filename" --profile "$profile_name" --quiet
+                response=$(pv "$source_file" | aws s3 cp - "s3://$target_bucket/$new_filename" --profile "$profile_name")
+                break
+                ;;
+            [Ss])
+                echo "Upload cancelled."
+                exit 1
+                ;;
+            *)
+                echo "Invalid response, please try again"
+                ;;
+        esac
+    done
+fi
 
 if [[ $? -ne 0 ]];
 then
