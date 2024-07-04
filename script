@@ -5,32 +5,38 @@ usage () {
     exit 1
 }
 
+enforce_supported_filename(){
+    local proposed_filename="$1"
+    while [[ "$proposed_filename" =~ [^a-zA-Z0-9] ]]
+    do
+        read -rp "Your new file name contains unsupported characters.\nFor cross-platform compatibility, file names can only contain alphanumeric characters: [a-zA-Z0-9].\nPlease provide another name: " proposed_filename
+    done
+    echo "$proposed_filename"
+}
+
+get_encrypt_key(){
+    dd if=/dev/random of="${new_filename}_key.bin" bs=32 count=1 iflag=fullblock &> "/dev/null"
+    key="fileb://${new_filename}_key.bin"
+}
+
 #validate min. number of args
 if [[ $# -lt 3 || $# -gt 4 ]];
 then
     echo "Please provide 3 or 4 arguments."
     usage
-fi
-
-source_file="$1"
-target_bucket="$2"
-profile_name="$3"
-recursive=" "
-
-
-if [[ $# -eq 4 ]];
-then   
-    new_filename="$4"
-    #validate new_filename
-    if [[ ! $new_filename =~ ^[a-zA-Z0-9!-_().*\']*$ ]];
-    then
-        printf "Your new file name contains unsupported characters.\n"
-        printf "To allow for cross-platform compatibility, new file names can only contain the following characters[a-zA-Z0-9!-_.*']"
-        exit 1
-    fi
 else
-    new_filename="$1"
+    source_file="$1"
+    target_bucket="$2"
+    profile_name="$3"
 fi
+
+#validate new file name
+if [[ $# -eq 3 ]]
+then
+    new_filename="$1"
+else
+    new_filename=$(enforce_supported_filename "$4")    
+fi 
 
 #validate source file
 if [[ -e "$source_file" ]];
@@ -72,12 +78,10 @@ else
     exit 1
 fi
 
-#if AWS CLI isn't installed, install and configure
+config_file="$HOME/.aws/config"
 
-aws_cli_path=$(which aws)
-
-
-if [[ -z "$aws_cli_path" ]]; 
+# Check that AWS is installed and correctly configured
+if ! command -v aws &> /dev/null
 then
     if [[ -e "./awscliv2.zip" && -s "./awscliv2.zip" ]];
     then
@@ -86,7 +90,7 @@ then
     then
         sudo ./aws/install
     else
-        #AWS CLI not installed, install
+        #No AWS CLI installation files found, download and install
         echo "Installing AWS CLI..."
         curl "https://awscli.amazonaws.com/awscli-exe-linux-x86_64.zip" -o "awscliv2.zip" && unzip awscliv2.zip && sudo ./aws/install
         
@@ -95,33 +99,51 @@ then
         if [ $exit_code -ne 0 ]; 
         then
             echo "Unable to auto-install AWS CLI. Please install manually and retry file upload." 
-            exit 1  
+            exit 1
+        else
+            echo "Installation completed. Please set up credentials in $config_file"
         fi 
+    fi
+else
+    # Check if the config file exists and is readable
+    if [[ -e "$config_file" && -r "$config_file" ]]
+    then
+        # Check if the config file contains the required credentials
+        if grep -q "aws_secret_access_key" "$config_file" 
+        then
+            :
+        else
+            echo -e "Configuration file does not contain required credentials.\nPlease ensure it contains the necessary credential key-and-values pairs."
+            exit 1
+        fi
+    else
+        echo -e "Configuration file not properly set up.\nPlease ensure the file is located at: $config_file and is readable."
+        exit 1
     fi
 fi
 
 
-if [[ -z $(which pv) ]];
+if ! command -v pv &> /dev/null
 then
     sudo apt-get update
     sudo apt-get install -y pv
 fi
 pv_exit_code=$?
 
-#upload file
+#check duplicate in target bucket
 if [[ $pv_exit_code -eq 0 ]];
 then
     file_in_bucket=$(aws s3 ls "s3://$target_bucket/$new_filename" --profile "$profile_name" --human-readable)
 fi
 
-#create and save encryption key
-dd if=/dev/random of=key.bin bs=32 count=1 iflag=fullblock &> "/dev/null"
-
+#upload file
 if [[ -z $file_in_bucket ]];
 then
-    response=$(pv "$source_file" | aws s3 cp - "s3://$target_bucket/$new_filename" --profile "$profile_name" --sse-c --sse-c-key "fileb://key.bin")
+    get_encrypt_key "$new_filename"
+    response=$(get_encrypt_key | pv "$source_file" | aws s3 cp - "s3://$target_bucket/$new_filename" --profile "$profile_name" --sse-c --sse-c-key "$key")
+    successful=$?
 else
-    echo -e "\nTarget bucket $target_bucket contains the possibly duplicate item(s) listed below:"
+    echo -e "\nTarget bucket $target_bucket contains the possibly duplicate item(s) below:"
     echo "$file_in_bucket"
     while true;
     do
@@ -129,23 +151,18 @@ else
         echo
         case "$sync_op" in
             [Rr])
-                while true;
-                do
-                    read -rp "What would you like to rename your file? : " new_name
-                    if [[ $new_name =~ ^[^a-zA-Z0-9!-_().*\']*$ ]];
-                    then
-                        printf "Your new file name contains unsupported characters.\n"
-                        printf "To allow for cross-platform compatibility, new file names can only contain the following characters: [a-zA-Z0-9!-_.*']"
-                    else
-                        break
-                    fi
-                done
-                response=$(pv "$source_file" | aws s3 cp - "s3://$target_bucket/$new_name" --profile "$profile_name" --sse-c --sse-c-key "fileb://key.bin")
+                read -rp "What would you like to rename your file? : " file_rename
+                new_filename=$(enforce_supported_filename "$file_rename")
+                get_encrypt_key "$new_filename"
+                response=$(pv "$source_file" | aws s3 cp - "s3://$target_bucket/$new_filename" --profile "$profile_name" --sse-c --sse-c-key "$key")
+                successful=$?
                 break
                 ;;
             [Oo])
+                get_encrypt_key "$new_filename"
                 aws s3 rm "s3://$target_bucket/$new_filename" --profile "$profile_name" --quiet
-                response=$(pv "$source_file" | aws s3 cp - "s3://$target_bucket/$new_filename" --profile "$profile_name" --sse-c --sse-c-key "fileb://key.bin")
+                response=$(pv "$source_file" | aws s3 cp - "s3://$target_bucket/$new_filename" --profile "$profile_name" --sse-c --sse-c-key "$key")
+                successful=$?
                 break
                 ;;
             [Ss])
@@ -159,10 +176,11 @@ else
     done
 fi
 
-if [[ $? -ne 0 ]];
+if [ ! "$successful" ]
 then
     echo -e "ERROR:  AWS reports s3api copy-object operation failed.\n$response"
     exit 1
 else
-    echo -e "Operation successful"
+
+    echo -e "$response\nOperation successful."
 fi
