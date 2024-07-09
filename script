@@ -78,6 +78,27 @@ else
     exit 1
 fi
 
+storage_classses=("STANDARD" "REDUCED_REDUNDANCY" "STANDARD_IA" "ONEZONE_IA" "INTELLIGENT_TIERING" "GLACIER" "DEEP_ARCHIVE" "GLACIER_IR")
+
+specify_storage(){
+    while true;
+    do
+        read -rp "Please specify your target storage class by entering a number: (0) STANDARD | (1) REDUCED_REDUNDANCY | (2) STANDARD_IA | (3) ONEZONE_IA | (4) INTELLIGENT_TIERING | (5) GLACIER | (6) DEEP_ARCHIVE | (7) GLACIER_IR. " user_input
+        if [[ "$user_input" =~ ^[0-9]+$ ]]
+        then
+            echo -e "You have entered an invalid input"
+        else
+            if [[ $user_input -ge 0 && $user_input -le 7 ]]
+            then
+                storage_class=${storage_classses[$user_input]}
+                break
+            else
+                echo -e "Please choose a number between 0 and 7\n"
+            fi
+        fi
+    done
+}
+
 config_file="$HOME/.aws/config"
 
 # Check that AWS is installed and correctly configured
@@ -140,32 +161,32 @@ fi
 if [[ -z $file_in_bucket ]];
 then
     get_encrypt_key "$new_filename"
-    response=$(get_encrypt_key | pv "$source_file" | aws s3 cp - "s3://$target_bucket/$new_filename" --profile "$profile_name" --sse-c --sse-c-key "$key")
+    response=$(pv "$source_file" | aws s3 cp - "s3://$target_bucket/$new_filename" --profile "$profile_name" --sse-c --sse-c-key "$key" ${recursive:+$recursive} --storage-class "$storage_class")
     successful=$?
 else
     echo -e "\nTarget bucket $target_bucket contains the possibly duplicate item(s) below:"
     echo "$file_in_bucket"
     while true;
     do
-        read -rp "Would you like to (r)ename, (o)verwrite, or (s)kip: " sync_op
+        read -rp "Would you like to (r)ename, (o)verwrite, or (c)ancel this upload: " sync_op
         echo
         case "$sync_op" in
             [Rr])
                 read -rp "What would you like to rename your file? : " file_rename
                 new_filename=$(enforce_supported_filename "$file_rename")
                 get_encrypt_key "$new_filename"
-                response=$(pv "$source_file" | aws s3 cp - "s3://$target_bucket/$new_filename" --profile "$profile_name" --sse-c --sse-c-key "$key")
+                response=$(pv "$source_file" | aws s3 cp - "s3://$target_bucket/$new_filename" --profile "$profile_name" --sse-c --sse-c-key "$key" ${recursive:+$recursive} --storage-class "$storage_class")
                 successful=$?
                 break
                 ;;
             [Oo])
                 get_encrypt_key "$new_filename"
                 aws s3 rm "s3://$target_bucket/$new_filename" --profile "$profile_name" --quiet
-                response=$(pv "$source_file" | aws s3 cp - "s3://$target_bucket/$new_filename" --profile "$profile_name" --sse-c --sse-c-key "$key")
+                response=$(pv "$source_file" | aws s3 cp - "s3://$target_bucket/$new_filename" --profile "$profile_name" --sse-c --sse-c-key "$key" ${recursive:+$recursive} --storage-class "$storage_class")
                 successful=$?
                 break
                 ;;
-            [Ss])
+            [Cc])
                 echo "Upload cancelled."
                 exit 1
                 ;;
