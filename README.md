@@ -19,10 +19,10 @@ To use this script, you need to setup the following:
 ### Prerequisites/Requirements
 
 – aws account
-    –  IAM User
-    –  IAM User long-term credentials
-    –  IAM Role 
-    _  IAM Role ID Number
+    – IAM User
+    – IAM User long-term credentials
+    – IAM Role 
+    – IAM Role ID Number
 – python (for aws cli)
 – aws cli
 – pv
