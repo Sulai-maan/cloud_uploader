@@ -4,12 +4,12 @@ Upload files to your AWS S3 instance via the cli by leveraging the AWS CLI.
 
 ## Table of contents
 
-[Overview]
-[Getting started]
-[Preprequisites/Requirements]
-[Usage]
-[Features]
-[Resources]
+1. [Overview](#overview)
+2. [Getting started](#getting-started)
+3. [Requirements](#requirements)
+4. [Usage](#usage)
+5. [Features](#features)
+6. [Resources](#resources)
 
 ## About this project
 
@@ -23,7 +23,7 @@ This script is written to be run on an Ubuntu linux machine, so it may run into 
 
 The following resources and packages are required to use this script:
 
-### Prerequisites/Requirements
+### Requirements
 
 * aws account
   * AWS S3 instance
@@ -35,13 +35,13 @@ The following resources and packages are required to use this script:
 
 #### Configuring AWS CLI
 
-(If there's a part of this section, or a concept, you don't understand, check the resources section of this readme doc. I've linked a few resources that you'll find helpful)
+*(If there's a part of this section, or a concept, you don't understand, check the resources section of this readme doc. I've linked a few resources that you'll find helpful)*
 
 For the AWS CLI to access your AWS resources, it needs to be configured with the necessary access credentials. I've chosen the 'config file' option from the available options because it offers some extra security (e.g. access restriction, encryption) and is well-suited for people who typically have several uploads to do.
 
-– The AWS CLI can read all access configurations from the '~/.aws/config' file, so that's where you'll be keeping your access credentials. If it doesn't already exist, create it
-– Generate an access key for the IAM User profile you'll be using for this operation (NEVER USE YOUR ROOT USER ACCOUNT, CREATE A NEW USER IN THE IAM)
-– Add the access credentials to the config file you created earlier using the format below:
+- The AWS CLI can read all access configurations from the '~/.aws/config' file, so that's where you'll be keeping your access credentials. If it doesn't already exist, create it
+- Generate an access key for the IAM User profile you'll be using for this operation (NEVER USE YOUR ROOT USER ACCOUNT, CREATE A NEW USER IN THE IAM)
+- Add the access credentials to the config file you created earlier using the format below:
 
 ```html
 [default]
@@ -81,14 +81,14 @@ bash ./aws_upload ./datafile c1-assets awss3-uploader datafilefrommymachine
 
 ### Features
 
-– [x] Server-side encryption using your keys (key filed saved in source file dir)
-– [x] Storage class selection – interactive
-– [x] File sync - overwrite or rename dupliate files
-– [x] Upload progress bar
+* [x] Server-side encryption using your keys (key filed saved in source file dir)
+* [x] Storage class selection – interactive
+* [x] File sync - overwrite or rename dupliate files
+* [x] Upload progress bar
 
 ### Resources
 
-– [Setting up the AWS CLI](https://docs.aws.amazon.com/cli/latest/userguide/getting-started-quickstart.html)
-– [AWS CLI Configuration and Credential files setting](https://docs.aws.amazon.com/cli/latest/userguide/cli-configure-files.html)
-– [Authenticate with IAM User credentials](https://docs.aws.amazon.com/cli/latest/userguide/cli-authentication-user.html)
-– [Using an IAM role in the AWS CLI](https://docs.aws.amazon.com/cli/latest/userguide/cli-configure-role.html)
+* [Setting up the AWS CLI](https://docs.aws.amazon.com/cli/latest/userguide/getting-started-quickstart.html)
+* [AWS CLI Configuration and Credential files setting](https://docs.aws.amazon.com/cli/latest/userguide/cli-configure-files.html)
+* [Authenticate with IAM User credentials](https://docs.aws.amazon.com/cli/latest/userguide/cli-authentication-user.html)
+* [Using an IAM role in the AWS CLI](https://docs.aws.amazon.com/cli/latest/userguide/cli-configure-role.html)
