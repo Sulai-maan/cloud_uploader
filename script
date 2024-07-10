@@ -83,11 +83,10 @@ storage_classses=("STANDARD" "REDUCED_REDUNDANCY" "STANDARD_IA" "ONEZONE_IA" "IN
 specify_storage(){
     while true;
     do
+        echo
         read -rp "Please specify your target storage class by entering a number: (0) STANDARD | (1) REDUCED_REDUNDANCY | (2) STANDARD_IA | (3) ONEZONE_IA | (4) INTELLIGENT_TIERING | (5) GLACIER | (6) DEEP_ARCHIVE | (7) GLACIER_IR. " user_input
         if [[ "$user_input" =~ ^[0-9]+$ ]]
         then
-            echo -e "You have entered an invalid input"
-        else
             if [[ $user_input -ge 0 && $user_input -le 7 ]]
             then
                 storage_class=${storage_classses[$user_input]}
@@ -95,6 +94,8 @@ specify_storage(){
             else
                 echo -e "Please choose a number between 0 and 7\n"
             fi
+        else
+            echo -e "You have entered an invalid input\n"
         fi
     done
 }
@@ -157,6 +158,8 @@ then
     file_in_bucket=$(aws s3 ls "s3://$target_bucket/$new_filename" --profile "$profile_name" --human-readable)
 fi
 
+specify_storage
+
 #upload file
 if [[ -z $file_in_bucket ]];
 then
@@ -164,29 +167,29 @@ then
     response=$(pv "$source_file" | aws s3 cp - "s3://$target_bucket/$new_filename" --profile "$profile_name" --sse-c --sse-c-key "$key" ${recursive:+$recursive} --storage-class "$storage_class")
     successful=$?
 else
-    echo -e "\nTarget bucket $target_bucket contains the possibly duplicate item(s) below:"
+    echo -e "\nThe $target_bucket bucket contains the possibly duplicate item(s) below:"
     echo "$file_in_bucket"
     while true;
     do
-        read -rp "Would you like to (r)ename, (o)verwrite, or (c)ancel this upload: " sync_op
+        read -rp "Would you like to (r)ename, (c)ontinue, or (s)top this upload?: " sync_op
         echo
         case "$sync_op" in
             [Rr])
-                read -rp "What would you like to rename your file? : " file_rename
+                read -rp "Please provide a new name for your upload? : " file_rename
                 new_filename=$(enforce_supported_filename "$file_rename")
                 get_encrypt_key "$new_filename"
                 response=$(pv "$source_file" | aws s3 cp - "s3://$target_bucket/$new_filename" --profile "$profile_name" --sse-c --sse-c-key "$key" ${recursive:+$recursive} --storage-class "$storage_class")
                 successful=$?
                 break
                 ;;
-            [Oo])
+            [Cc])
                 get_encrypt_key "$new_filename"
-                aws s3 rm "s3://$target_bucket/$new_filename" --profile "$profile_name" --quiet
+                # aws s3 rm "s3://$target_bucket/$new_filename" --profile "$profile_name" --quiet
                 response=$(pv "$source_file" | aws s3 cp - "s3://$target_bucket/$new_filename" --profile "$profile_name" --sse-c --sse-c-key "$key" ${recursive:+$recursive} --storage-class "$storage_class")
                 successful=$?
                 break
                 ;;
-            [Cc])
+            [Ss])
                 echo "Upload cancelled."
                 exit 1
                 ;;
