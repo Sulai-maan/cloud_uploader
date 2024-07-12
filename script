@@ -19,72 +19,13 @@ get_encrypt_key(){
     key="fileb://${new_filename}_key.bin"
 }
 
-#validate min. number of args
-if [[ $# -lt 3 || $# -gt 4 ]];
-then
-    echo "Please provide 3 or 4 arguments."
-    usage
-else
-    source_file="$1"
-    target_bucket="$2"
-    profile_name="$3"
-fi
-
-#validate new file name
-if [[ $# -eq 3 ]]
-then
-    new_filename="$1"
-else
-    new_filename=$(enforce_supported_filename "$4")    
-fi 
-
-#validate source file
-if [[ -e "$source_file" ]];
-then
-    if [[ -r "$source_file" ]];
-    then
-        if [[ -f "$source_file" ]];
-        then
-            :
-        elif [[ -d "$source_file" ]];
-        then
-            while true; 
-            do
-                read -r -p "You're attempting to upload a directory and all of its content, continue? Y-[Yes], N-[No, cancel]" recursive
-                case "$recursive" in
-                    [Yy])
-                        recursive="--recursive"
-                        break
-                        ;;
-                    [Nn])
-                        echo "Operation cancelled."
-                        exit 1
-                        ;;
-                    *)
-                        echo "Invalid response, please try again"
-                        ;;
-                esac
-            done
-        else
-            echo "Invalid source file type. Please try again."
-            exit 1
-        fi
-    else
-        echo "Sorry, you don't have read permissions for the source file"
-        exit 1
-    fi
-else
-    echo "The file/directory $source_file does not exist. Please try again."
-    exit 1
-fi
-
 storage_classses=("STANDARD" "REDUCED_REDUNDANCY" "STANDARD_IA" "ONEZONE_IA" "INTELLIGENT_TIERING" "GLACIER" "DEEP_ARCHIVE" "GLACIER_IR")
 
 specify_storage(){
+    echo -e "\n(0) STANDARD | (1) REDUCED_REDUNDANCY | (2) STANDARD_IA | (3) ONEZONE_IA\n(4) INTELLIGENT_TIERING | (5) GLACIER | (6) DEEP_ARCHIVE | (7) GLACIER_IR" 
     while true;
     do
-        echo
-        read -rp "Please specify your target storage class by entering a number: (0) STANDARD | (1) REDUCED_REDUNDANCY | (2) STANDARD_IA | (3) ONEZONE_IA | (4) INTELLIGENT_TIERING | (5) GLACIER | (6) DEEP_ARCHIVE | (7) GLACIER_IR. " user_input
+        read -rp "Please specify a storage class by entering a number: " user_input
         if [[ "$user_input" =~ ^[0-9]+$ ]]
         then
             if [[ $user_input -ge 0 && $user_input -le 7 ]]
@@ -100,6 +41,69 @@ specify_storage(){
     done
 }
 
+
+#validate min. number of args
+if [[ $# -lt 3 || $# -gt 4 ]];
+then
+    echo "Please provide 3 or 4 arguments."
+    usage
+fi
+
+source_file="$1"
+target_bucket="$2"
+profile_name="$3"
+
+#validate new file name
+if [[ $# -eq 3 ]]
+then
+    new_filename=$(basename "$source_file")
+else
+    new_filename=$(enforce_supported_filename "$4")    
+fi 
+
+
+#validate source file exists and is readable
+if [[ ! -e "$source_file" ]];
+then
+    echo "The file/directory $source_file does not exist. Please try again."
+    exit 1
+fi
+
+if [[ ! -r "$source_file" ]]
+then
+    echo "Sorry, you don't have read permissions for the source file"
+    exit 1
+fi
+
+#Valid source file type and make folder uploads recursive
+if [[ -f "$source_file" ]]
+then
+    :
+elif [[ -d "$source_file" ]]
+then
+    while true; 
+    do
+        read -r -p "You're attempting to upload a directory and all of its content, continue? Y-[Yes], N-[No, cancel]" recursive
+        case "$recursive" in
+            [Yy])
+                recursive="--recursive"
+                break
+                ;;
+            [Nn])
+                echo "Operation cancelled."
+                exit 1
+                ;;
+            *)
+                echo "Invalid response, please try again"
+                ;;
+        esac
+    done
+else
+    echo "Invalid source file type. Please try again."
+    exit 1
+fi
+
+
 config_file="$HOME/.aws/config"
 
 # Check that AWS is installed and correctly configured
@@ -112,7 +116,7 @@ then
     then
         sudo ./aws/install
     else
-        #No AWS CLI installation files found, download and install
+        # AWS CLI installation files not found, now download and install
         echo "Installing AWS CLI..."
         curl "https://awscli.amazonaws.com/awscli-exe-linux-x86_64.zip" -o "awscliv2.zip" && unzip awscliv2.zip && sudo ./aws/install
         
@@ -131,11 +135,9 @@ else
     if [[ -e "$config_file" && -r "$config_file" ]]
     then
         # Check if the config file contains the required credentials
-        if grep -q "aws_secret_access_key" "$config_file" 
+        if ! grep -q "aws_secret_access_key" "$config_file" 
         then
-            :
-        else
-            echo -e "Configuration file does not contain required credentials.\nPlease ensure it contains the necessary credential key-and-values pairs."
+            echo -e "Configuration file does not contain required credentials.\nPlease ensure it contains the necessary credential key-value pairs."
             exit 1
         fi
     else
@@ -144,7 +146,7 @@ else
     fi
 fi
 
-
+# check if progress bar utility exists or install 
 if ! command -v pv &> /dev/null
 then
     sudo apt-get update
@@ -156,11 +158,15 @@ pv_exit_code=$?
 if [[ $pv_exit_code -eq 0 ]];
 then
     file_in_bucket=$(aws s3 ls "s3://$target_bucket/$new_filename" --profile "$profile_name" --human-readable)
+else
+    echo "pv installation unsuccesssful. please install manually and try again"
+    exit 1
 fi
 
+# ask user for target storage class
 specify_storage
 
-#upload file
+# create encryption key, upload file, grab exit code
 if [[ -z $file_in_bucket ]];
 then
     get_encrypt_key "$new_filename"
@@ -206,5 +212,5 @@ then
     exit 1
 else
 
-    echo -e "$response\nOperation successful."
+    echo -e "Operation successful. Encryption key saved in script dir"
 fi
